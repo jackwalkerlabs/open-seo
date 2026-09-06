@@ -49,13 +49,14 @@ describe("429 crawl retry", () => {
   );
 
   it("does not retry early when Retry-After exceeds the cap", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValue(rateLimited("31"));
+    const response = rateLimited("31");
+    const cancelBody = vi.spyOn(response.body!, "cancel");
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(response);
 
     const result = await crawlPage("https://example.com/", 0, false);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(cancelBody).toHaveBeenCalledOnce();
     expect(result).toMatchObject({ statusCode: 429, fetchClass: "blocked" });
   });
 

@@ -38,7 +38,10 @@ async function fetchPage(
   if (response.status !== 429) return response;
 
   const waitMs = retryAfterMs(response.headers.get("retry-after"));
-  if (waitMs > RATE_LIMIT_MAX_WAIT_MS) return response;
+  if (waitMs > RATE_LIMIT_MAX_WAIT_MS) {
+    await response.body?.cancel();
+    return response;
+  }
 
   await response.body?.cancel();
   if (waitMs > 0) {
