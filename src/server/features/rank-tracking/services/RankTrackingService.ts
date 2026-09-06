@@ -32,6 +32,7 @@ import {
 import { getLatestResults } from "./rankTrackingResults";
 import { toSqliteTimestamp } from "@/server/features/rank-tracking/rankTrackingTimestamps";
 import { RankTrackingKeywordService } from "./RankTrackingKeywordService";
+import { resolveRankTrackingLocation } from "./resolveRankTrackingLocation";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -59,7 +60,9 @@ async function createConfig(input: {
     ? computeNextCheckAt(scheduleInterval)
     : null;
 
-  const locationName = input.locationName ?? null;
+  const locationName = input.locationName
+    ? await resolveRankTrackingLocation(locationCode, input.locationName)
+    : null;
   const existing =
     await RankTrackingRepository.getConfigByProjectDomainLocation(
       input.projectId,
@@ -148,6 +151,19 @@ async function updateConfig(
 ) {
   const updates: typeof input & { nextCheckAt?: string | null } = {};
 
+  let resolvedLocationName = input.locationName;
+  if (input.locationName) {
+    let locationCode = input.locationCode;
+    if (locationCode === undefined) {
+      locationCode = (await getValidatedConfig(configId, projectId))
+        .locationCode;
+    }
+    resolvedLocationName = await resolveRankTrackingLocation(
+      locationCode,
+      input.locationName,
+    );
+  }
+
   if (input.domain !== undefined)
     updates.domain = normalizeDomain(input.domain);
   if (input.locationCode !== undefined)
@@ -155,7 +171,7 @@ async function updateConfig(
   if (input.languageCode !== undefined)
     updates.languageCode = input.languageCode;
   if (input.locationName !== undefined)
-    updates.locationName = input.locationName;
+    updates.locationName = resolvedLocationName;
   if (input.devices !== undefined) updates.devices = input.devices;
   if (input.serpDepth !== undefined) updates.serpDepth = input.serpDepth;
   if (input.isActive !== undefined) updates.isActive = input.isActive;
