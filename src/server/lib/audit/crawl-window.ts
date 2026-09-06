@@ -7,7 +7,7 @@ import type { CrawledPageResult } from "@/server/lib/audit/types";
  * slowly (politeness toward struggling or defensive sites) and grows when
  * the site answers fast.
  */
-interface CrawlWindowLimits {
+export interface CrawlWindowLimits {
   /** Window size a chunk starts with, before any observations. */
   initial: number;
   min: number;

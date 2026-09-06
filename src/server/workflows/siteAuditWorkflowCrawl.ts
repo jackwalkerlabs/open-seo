@@ -17,11 +17,16 @@ import {
   adjustCrawlWindow,
   clampCrawlWindow,
   CRAWL_WINDOW,
-  RETRY_CRAWL_WINDOW,
 } from "@/server/lib/audit/crawl-window";
 import { crawlPage } from "@/server/workflows/site-audit-workflow-helpers";
 import { pgStep } from "@/server/workflows/pgStep";
 import { CRAWL_CHUNK_STEP } from "@/server/workflows/auditStepConfigs";
+import {
+  configuredCrawlWindow,
+  readCrawlPacing,
+  RequestStartPacer,
+  type CrawlPacing,
+} from "@/server/lib/audit/crawl-pacing";
 
 /**
  * The crawl runs in chunks: each chunk is one durable step that leases up to
@@ -97,6 +102,9 @@ export async function runCrawlPhase(
   step: WorkflowStep,
   params: CrawlPhaseParams,
 ): Promise<CrawlPhaseResult> {
+  // Snapshot operator settings once so every durable chunk and replay in this
+  // crawl phase uses the same values even if bindings change mid-audit.
+  const pacing = await readCrawlPacing();
   let chunkNo = 0;
   let attemptedTotal = 0;
   let pending = params.seededCount;
@@ -119,6 +127,7 @@ export async function runCrawlPhase(
           chunkNo,
           attemptedBefore: attemptedTotal,
           startWindow: windowHint,
+          pacing,
         }),
     );
     // Apply the chunk's counters even when it did no new work (a retried
@@ -145,6 +154,8 @@ async function runCrawlChunk(
     chunkNo: number;
     attemptedBefore: number;
     startWindow: number;
+    /** Optional for compatibility with durable inputs created before pacing. */
+    pacing?: CrawlPacing;
   },
 ): Promise<{
   attemptedInChunk: number;
@@ -180,7 +191,11 @@ async function runCrawlChunk(
   // A retry means the previous attempt died mid-crawl (in production almost
   // always exceededMemory), and it is the chunk's last attempt — so it runs
   // under drastically reduced limits instead of the profile that just failed.
-  const limits = isRetry ? RETRY_CRAWL_WINDOW : CRAWL_WINDOW;
+  const pacing = input.pacing ?? {
+    concurrency: CRAWL_WINDOW.max,
+    delayMs: 0,
+  };
+  const limits = configuredCrawlWindow(isRetry, pacing.concurrency);
   let windowSize = isRetry
     ? limits.initial
     : clampCrawlWindow(input.startWindow, limits);
@@ -193,6 +208,7 @@ async function runCrawlChunk(
   // with itself, so DB write pressure stays bounded at one batch at a time.
   let persistChain: Promise<unknown> = Promise.resolve();
   let queuedPersists = 0;
+  const requestStartPacer = new RequestStartPacer(pacing.delayMs);
 
   const flush = () => {
     if (batch.length === 0) return;
@@ -219,7 +235,9 @@ async function runCrawlChunk(
       });
   };
 
-  const launch = (entry: ClaimedUrl) => {
+  const launch = async (entry: ClaimedUrl): Promise<boolean> => {
+    await requestStartPacer.wait();
+    if (Date.now() >= deadlineAt) return false;
     const promise = crawlPage(entry.url, entry.depth, entry.inSitemap)
       .then((page) => {
         attemptedInChunk += 1;
@@ -230,6 +248,7 @@ async function runCrawlChunk(
         inFlight.delete(promise);
       });
     inFlight.add(promise);
+    return true;
   };
 
   while (true) {
@@ -242,7 +261,7 @@ async function runCrawlChunk(
       // loop condition because the type-aware linter cannot see that async
       // mutation and flags the otherwise valid backpressure check.
       if (queuedPersists > MAX_QUEUED_PERSIST_BATCHES) break;
-      launch(claimed[nextIndex]);
+      if (!(await launch(claimed[nextIndex]))) break;
       nextIndex += 1;
     }
     if (inFlight.size > 0) {

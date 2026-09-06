@@ -7,6 +7,46 @@ import { normalizeUrl } from "@/server/lib/audit/url-utils";
 
 const CRAWL_USER_AGENT = "OpenSEO-Audit/1.0";
 const MAX_HTML_BYTES = 1024 * 1024;
+const RATE_LIMIT_FALLBACK_MS = 2_000;
+const RATE_LIMIT_MAX_WAIT_MS = 30_000;
+
+export function retryAfterMs(value: string | null, now = Date.now()): number {
+  if (value !== null && /^\s*\d+\s*$/.test(value)) {
+    return Number(value) * 1_000;
+  }
+  if (value !== null) {
+    const date = Date.parse(value);
+    if (Number.isFinite(date)) return Math.max(0, date - now);
+  }
+  return RATE_LIMIT_FALLBACK_MS;
+}
+
+async function fetchPage(url: string): Promise<Response> {
+  const options: RequestInit = {
+    headers: {
+      "User-Agent": CRAWL_USER_AGENT,
+      Accept: "text/html,application/xhtml+xml",
+    },
+    redirect: "manual",
+    signal: AbortSignal.timeout(15_000),
+  };
+  const response = await fetch(url, options);
+  if (response.status !== 429) return response;
+
+  const waitMs = retryAfterMs(response.headers.get("retry-after"));
+  if (waitMs > RATE_LIMIT_MAX_WAIT_MS) return response;
+
+  await response.body?.cancel();
+  if (waitMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, waitMs));
+  }
+  return fetch(url, {
+    ...options,
+    // AbortSignal instances are one-use protections; give the retry its own
+    // full timeout rather than inheriting time spent waiting on Retry-After.
+    signal: AbortSignal.timeout(15_000),
+  });
+}
 
 /**
  * Markers of a bot-mitigation challenge page. We classify these honestly as
@@ -69,14 +109,7 @@ export async function crawlPage(
     // /docs/) need no special handling: normalizeUrl preserves trailing
     // slashes, so /docs and /docs/ are distinct URLs and the redirect resolves
     // to its canonical target instead of cycling back to its own source.
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": CRAWL_USER_AGENT,
-        Accept: "text/html,application/xhtml+xml",
-      },
-      redirect: "manual",
-      signal: AbortSignal.timeout(15_000),
-    });
+    const response = await fetchPage(url);
 
     const responseTimeMs = Date.now() - startTime;
     const statusCode = response.status;
