@@ -400,6 +400,8 @@ export default Alchemy.Stack(
         // path reads — DataForSEO (Lighthouse), Autumn (metering), PostHog
         // (capture). No auth/OAuth/Loops/Turnstile secrets.
         DATAFORSEO_API_KEY: dataEnv.DATAFORSEO_API_KEY,
+        AUDIT_CRAWL_CONCURRENCY: dataEnv.AUDIT_CRAWL_CONCURRENCY,
+        AUDIT_CRAWL_DELAY_MS: dataEnv.AUDIT_CRAWL_DELAY_MS,
         AUTUMN_SECRET_KEY: dataEnv.AUTUMN_SECRET_KEY,
         POSTHOG_PUBLIC_KEY: dataEnv.POSTHOG_PUBLIC_KEY,
         POSTHOG_HOST: dataEnv.POSTHOG_HOST,
