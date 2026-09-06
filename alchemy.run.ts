@@ -272,6 +272,8 @@ const dataEnv = {
   GOOGLE_CLIENT_SECRET: optionalSecret("GOOGLE_CLIENT_SECRET"),
   OPENROUTER_API_KEY: optionalSecret("OPENROUTER_API_KEY"),
   OPENROUTER_MODEL: optionalVar("OPENROUTER_MODEL"),
+  AUDIT_CRAWL_CONCURRENCY: optionalVar("AUDIT_CRAWL_CONCURRENCY"),
+  AUDIT_CRAWL_DELAY_MS: optionalVar("AUDIT_CRAWL_DELAY_MS"),
   AUTUMN_SECRET_KEY: optionalSecret("AUTUMN_SECRET_KEY"),
   AUTUMN_WEBHOOK_SECRET: optionalSecret("AUTUMN_WEBHOOK_SECRET"),
   DUB_API_KEY: optionalSecret("DUB_API_KEY"),
@@ -398,6 +400,8 @@ export default Alchemy.Stack(
         // path reads — DataForSEO (Lighthouse), Autumn (metering), PostHog
         // (capture). No auth/OAuth/Loops/Turnstile secrets.
         DATAFORSEO_API_KEY: dataEnv.DATAFORSEO_API_KEY,
+        AUDIT_CRAWL_CONCURRENCY: dataEnv.AUDIT_CRAWL_CONCURRENCY,
+        AUDIT_CRAWL_DELAY_MS: dataEnv.AUDIT_CRAWL_DELAY_MS,
         AUTUMN_SECRET_KEY: dataEnv.AUTUMN_SECRET_KEY,
         POSTHOG_PUBLIC_KEY: dataEnv.POSTHOG_PUBLIC_KEY,
         POSTHOG_HOST: dataEnv.POSTHOG_HOST,

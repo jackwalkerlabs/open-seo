@@ -64,6 +64,14 @@ This provisions the D1 database, KV namespaces, and R2 bucket, applies the datab
 
 If login fails, re-check `ACCESS_ALLOWED_EMAILS` and redeploy.
 
+## Optional site-audit pacing
+
+For sites that rate-limit bursty crawlers, set `AUDIT_CRAWL_CONCURRENCY` to a
+value from `1` to `20`, or set `AUDIT_CRAWL_DELAY_MS` to add `0` to `10000`
+milliseconds between request starts. Unset or invalid values preserve the
+built-in defaults; out-of-range values are clamped. Redeploy after changing
+either value in `.env.selfhost`.
+
 ## Connect the MCP server through Cloudflare Access
 
 Use the same Cloudflare Access application that protects your OpenSEO Worker. Managed OAuth is required for MCP clients and is not enabled by default.

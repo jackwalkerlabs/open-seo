@@ -40,6 +40,12 @@ Optional env values:
 - `ALLOWED_HOST` (single reverse-proxy hostname to allow in Vite preview)
 - `AUTH_MODE=local_noauth` (already set in compose)
 - `OPEN_SEO_IMAGE` (defaults to `ghcr.io/every-app/open-seo:latest`)
+- `AUDIT_CRAWL_CONCURRENCY` (site-audit request concurrency, `1`–`20`; defaults to the built-in adaptive limit)
+- `AUDIT_CRAWL_DELAY_MS` (minimum delay between site-audit request starts, `0`–`10000` milliseconds; defaults to `0`)
+
+Out-of-range values are clamped to these ranges. Invalid values fall back to
+the defaults. Lower concurrency or a small delay can help storefronts that
+rate-limit bursty crawlers.
 
 If you are putting Docker behind a reverse proxy or a temporary tunnel, remember that Docker self-hosting runs with app auth disabled. Only expose it behind your own auth-protected reverse proxy, tunnel, or private network, and add the public hostname before restarting:
 
