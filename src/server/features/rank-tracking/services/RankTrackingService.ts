@@ -152,16 +152,19 @@ async function updateConfig(
   const updates: typeof input & { nextCheckAt?: string | null } = {};
 
   let resolvedLocationName = input.locationName;
-  if (input.locationName) {
-    let locationCode = input.locationCode;
-    if (locationCode === undefined) {
-      locationCode = (await getValidatedConfig(configId, projectId))
-        .locationCode;
+  if (input.locationName || input.locationCode !== undefined) {
+    const savedConfig =
+      input.locationName === undefined || input.locationCode === undefined
+        ? await getValidatedConfig(configId, projectId)
+        : undefined;
+    const locationCode = input.locationCode ?? savedConfig!.locationCode;
+    const locationName = input.locationName ?? savedConfig!.locationName;
+    if (locationName) {
+      resolvedLocationName = await resolveRankTrackingLocation(
+        locationCode,
+        locationName,
+      );
     }
-    resolvedLocationName = await resolveRankTrackingLocation(
-      locationCode,
-      input.locationName,
-    );
   }
 
   if (input.domain !== undefined)
@@ -170,7 +173,10 @@ async function updateConfig(
     updates.locationCode = input.locationCode;
   if (input.languageCode !== undefined)
     updates.languageCode = input.languageCode;
-  if (input.locationName !== undefined)
+  if (
+    input.locationName !== undefined ||
+    (input.locationCode !== undefined && resolvedLocationName)
+  )
     updates.locationName = resolvedLocationName;
   if (input.devices !== undefined) updates.devices = input.devices;
   if (input.serpDepth !== undefined) updates.serpDepth = input.serpDepth;
