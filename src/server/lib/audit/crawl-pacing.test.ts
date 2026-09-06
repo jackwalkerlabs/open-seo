@@ -40,7 +40,25 @@ describe("crawl pacing configuration", () => {
       concurrency: 20,
       delayMs: 0,
     });
+
+    envValues.set("AUDIT_CRAWL_CONCURRENCY", "0");
+    await expect(readCrawlPacing()).resolves.toEqual({
+      concurrency: 1,
+      delayMs: 0,
+    });
   });
+
+  it.each([
+    ["1", "0", { concurrency: 1, delayMs: 0 }],
+    ["20", "10000", { concurrency: 20, delayMs: 10_000 }],
+  ])(
+    "accepts boundary values concurrency=%s and delay=%s",
+    async (concurrency, delayMs, expected) => {
+      envValues.set("AUDIT_CRAWL_CONCURRENCY", concurrency);
+      envValues.set("AUDIT_CRAWL_DELAY_MS", delayMs);
+      await expect(readCrawlPacing()).resolves.toEqual(expected);
+    },
+  );
 
   it("persists one pacing snapshot across workflow replays", async () => {
     const persisted = new Map<string, unknown>();
