@@ -23,8 +23,8 @@ import { pgStep } from "@/server/workflows/pgStep";
 import { CRAWL_CHUNK_STEP } from "@/server/workflows/auditStepConfigs";
 import {
   configuredCrawlWindow,
-  readCrawlPacing,
   RequestStartPacer,
+  snapshotCrawlPacing,
   type CrawlPacing,
 } from "@/server/lib/audit/crawl-pacing";
 
@@ -104,7 +104,7 @@ export async function runCrawlPhase(
 ): Promise<CrawlPhaseResult> {
   // Snapshot operator settings once so every durable chunk and replay in this
   // crawl phase uses the same values even if bindings change mid-audit.
-  const pacing = await readCrawlPacing();
+  const pacing = await snapshotCrawlPacing(step);
   let chunkNo = 0;
   let attemptedTotal = 0;
   let pending = params.seededCount;

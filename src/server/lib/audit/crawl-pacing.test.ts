@@ -1,3 +1,4 @@
+import type { WorkflowStep } from "cloudflare:workers";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const envValues = new Map<string, string>();
@@ -9,6 +10,7 @@ import {
   configuredCrawlWindow,
   readCrawlPacing,
   RequestStartPacer,
+  snapshotCrawlPacing,
 } from "@/server/lib/audit/crawl-pacing";
 
 afterEach(() => {
@@ -38,6 +40,32 @@ describe("crawl pacing configuration", () => {
       concurrency: 20,
       delayMs: 0,
     });
+  });
+
+  it("persists one pacing snapshot across workflow replays", async () => {
+    const persisted = new Map<string, unknown>();
+    const step = {
+      do: vi.fn(async (name: string, callback: () => Promise<unknown>) => {
+        if (!persisted.has(name)) persisted.set(name, await callback());
+        return persisted.get(name);
+      }),
+    } as unknown as WorkflowStep;
+
+    envValues.set("AUDIT_CRAWL_CONCURRENCY", "3");
+    envValues.set("AUDIT_CRAWL_DELAY_MS", "100");
+    await expect(snapshotCrawlPacing(step)).resolves.toEqual({
+      concurrency: 3,
+      delayMs: 100,
+    });
+
+    envValues.set("AUDIT_CRAWL_CONCURRENCY", "9");
+    envValues.set("AUDIT_CRAWL_DELAY_MS", "900");
+    await expect(snapshotCrawlPacing(step)).resolves.toEqual({
+      concurrency: 3,
+      delayMs: 100,
+    });
+    expect(step.do).toHaveBeenCalledTimes(2);
+    expect([...persisted.keys()]).toEqual(["crawl-pacing"]);
   });
 
   it("caps every normal and retry window bound consistently", () => {

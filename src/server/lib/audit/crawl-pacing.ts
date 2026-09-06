@@ -1,3 +1,4 @@
+import type { WorkflowStep } from "cloudflare:workers";
 import { getOptionalEnvValue } from "@/server/lib/runtime-env";
 import {
   CRAWL_WINDOW,
@@ -30,6 +31,10 @@ export async function readCrawlPacing(): Promise<CrawlPacing> {
     concurrency: boundedInteger(concurrency, 1, 20, CRAWL_WINDOW.max),
     delayMs: boundedInteger(delayMs, 0, 10_000, 0),
   };
+}
+
+export function snapshotCrawlPacing(step: WorkflowStep): Promise<CrawlPacing> {
+  return step.do("crawl-pacing", readCrawlPacing);
 }
 
 export function configuredCrawlWindow(
