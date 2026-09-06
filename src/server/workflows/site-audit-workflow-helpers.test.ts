@@ -3,6 +3,7 @@ import {
   crawlPage,
   retryAfterMs,
 } from "@/server/workflows/site-audit-workflow-helpers";
+import { RequestStartPacer } from "@/server/lib/audit/crawl-pacing";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -57,4 +58,29 @@ describe("429 crawl retry", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(result).toMatchObject({ statusCode: 429, fetchClass: "blocked" });
   });
+
+  it.each([undefined, "0"])(
+    "paces the retry with the crawl phase pacer (%s)",
+    async (retryAfter) => {
+      vi.useFakeTimers();
+      vi.setSystemTime(Date.UTC(2026, 0, 1));
+      const starts: number[] = [];
+      const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
+        starts.push(Date.now());
+        return Promise.resolve(rateLimited(retryAfter));
+      });
+      const pacer = new RequestStartPacer(10_000);
+
+      await pacer.wait();
+      const resultPromise = crawlPage("https://example.com/", 0, false, pacer);
+      await vi.advanceTimersByTimeAsync(9_999);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      const result = await resultPromise;
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(starts[1] - starts[0]).toBe(10_000);
+      expect(result).toMatchObject({ statusCode: 429, fetchClass: "blocked" });
+    },
+  );
 });

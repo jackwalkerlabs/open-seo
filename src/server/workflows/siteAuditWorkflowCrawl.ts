@@ -238,7 +238,12 @@ async function runCrawlChunk(
   const launch = async (entry: ClaimedUrl): Promise<boolean> => {
     await requestStartPacer.wait();
     if (Date.now() >= deadlineAt) return false;
-    const promise = crawlPage(entry.url, entry.depth, entry.inSitemap)
+    const promise = crawlPage(
+      entry.url,
+      entry.depth,
+      entry.inSitemap,
+      requestStartPacer,
+    )
       .then((page) => {
         attemptedInChunk += 1;
         batch.push(page);

@@ -4,6 +4,7 @@ import type {
 } from "@/server/lib/audit/types";
 import { sha256Hex } from "@/server/lib/audit/ids";
 import { normalizeUrl } from "@/server/lib/audit/url-utils";
+import type { RequestStartPacer } from "@/server/lib/audit/crawl-pacing";
 
 const CRAWL_USER_AGENT = "OpenSEO-Audit/1.0";
 const MAX_HTML_BYTES = 1024 * 1024;
@@ -21,7 +22,10 @@ export function retryAfterMs(value: string | null, now = Date.now()): number {
   return RATE_LIMIT_FALLBACK_MS;
 }
 
-async function fetchPage(url: string): Promise<Response> {
+async function fetchPage(
+  url: string,
+  requestStartPacer?: RequestStartPacer,
+): Promise<Response> {
   const options: RequestInit = {
     headers: {
       "User-Agent": CRAWL_USER_AGENT,
@@ -40,6 +44,7 @@ async function fetchPage(url: string): Promise<Response> {
   if (waitMs > 0) {
     await new Promise((resolve) => setTimeout(resolve, waitMs));
   }
+  await requestStartPacer?.wait();
   return fetch(url, {
     ...options,
     // AbortSignal instances are one-use protections; give the retry its own
@@ -99,6 +104,7 @@ export async function crawlPage(
   url: string,
   crawlDepth: number | null,
   inSitemap: boolean,
+  requestStartPacer?: RequestStartPacer,
 ): Promise<CrawledPageResult> {
   const startTime = Date.now();
 
@@ -109,7 +115,7 @@ export async function crawlPage(
     // /docs/) need no special handling: normalizeUrl preserves trailing
     // slashes, so /docs and /docs/ are distinct URLs and the redirect resolves
     // to its canonical target instead of cycling back to its own source.
-    const response = await fetchPage(url);
+    const response = await fetchPage(url, requestStartPacer);
 
     const responseTimeMs = Date.now() - startTime;
     const statusCode = response.status;

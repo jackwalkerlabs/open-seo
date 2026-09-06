@@ -53,10 +53,13 @@ export class RequestStartPacer {
 
   async wait(): Promise<void> {
     const now = Date.now();
-    const waitMs = Math.max(0, this.nextStartAt - now);
+    const startAt = Math.max(now, this.nextStartAt);
+    const waitMs = startAt - now;
+    // Reserve this start before yielding so concurrent callers cannot receive
+    // the same slot.
+    this.nextStartAt = startAt + this.delayMs;
     if (waitMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, waitMs));
     }
-    this.nextStartAt = Date.now() + this.delayMs;
   }
 }
