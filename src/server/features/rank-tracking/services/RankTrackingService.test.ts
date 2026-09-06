@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getConfigsForProject: vi.fn(),
   createConfig: vi.fn(),
   updateConfig: vi.fn(),
+  resolveRankTrackingLocation: vi.fn(),
 }));
 
 vi.mock("cloudflare:workers", () => ({ env: {} }));
@@ -16,6 +17,9 @@ vi.mock(
   "@/server/features/rank-tracking/repositories/RankTrackingRepository",
   () => ({ RankTrackingRepository: mocks }),
 );
+vi.mock("./resolveRankTrackingLocation", () => ({
+  resolveRankTrackingLocation: mocks.resolveRankTrackingLocation,
+}));
 
 const archivedConfig = {
   id: "config_archived",
@@ -42,7 +46,11 @@ const baseInput = {
 };
 
 describe("RankTrackingService.createConfig", () => {
-  beforeEach(() => {});
+  beforeEach(() => {
+    mocks.resolveRankTrackingLocation.mockImplementation(
+      async (_locationCode: number, locationName: string) => locationName,
+    );
+  });
 
   it("reactivates an archived config instead of throwing, applying the new settings", async () => {
     mocks.getConfigByProjectDomainLocation.mockResolvedValue(archivedConfig);
@@ -122,6 +130,135 @@ describe("RankTrackingService.createConfig", () => {
       "acme.com",
       2840,
       null,
+    );
+  });
+
+  it("canonicalizes a local location before checking duplicates and saving", async () => {
+    mocks.getConfigByProjectDomainLocation.mockResolvedValue(null);
+    mocks.getConfigsForProject.mockResolvedValue([]);
+    mocks.createConfig.mockResolvedValue(undefined);
+    mocks.resolveRankTrackingLocation.mockResolvedValue(
+      "Enid,Oklahoma,United States",
+    );
+
+    await RankTrackingService.createConfig({
+      ...baseInput,
+      locationName: "enid",
+    });
+
+    expect(mocks.getConfigByProjectDomainLocation).toHaveBeenCalledWith(
+      "project_1",
+      "acme.com",
+      2840,
+      "Enid,Oklahoma,United States",
+    );
+    expect(mocks.createConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locationName: "Enid,Oklahoma,United States",
+      }),
+    );
+  });
+
+  it("does not load the location registry for a national config", async () => {
+    mocks.getConfigByProjectDomainLocation.mockResolvedValue(null);
+    mocks.getConfigsForProject.mockResolvedValue([]);
+    mocks.createConfig.mockResolvedValue(undefined);
+
+    await RankTrackingService.createConfig(baseInput);
+
+    expect(mocks.resolveRankTrackingLocation).not.toHaveBeenCalled();
+  });
+
+  it("canonicalizes a changed location before updating", async () => {
+    mocks.resolveRankTrackingLocation.mockResolvedValue(
+      "Enid,Oklahoma,United States",
+    );
+    mocks.updateConfig.mockResolvedValue(undefined);
+
+    await RankTrackingService.updateConfig("config_1", "project_1", {
+      locationCode: 2840,
+      locationName: "Enid",
+    });
+
+    expect(mocks.updateConfig).toHaveBeenCalledWith(
+      "config_1",
+      "project_1",
+      expect.objectContaining({
+        locationCode: 2840,
+        locationName: "Enid,Oklahoma,United States",
+      }),
+    );
+  });
+
+  it("uses the saved country when only the location name changes", async () => {
+    mocks.getConfigById.mockResolvedValue({
+      ...archivedConfig,
+      locationCode: 2840,
+    });
+    mocks.resolveRankTrackingLocation.mockResolvedValue(
+      "Enid,Oklahoma,United States",
+    );
+
+    await RankTrackingService.updateConfig("config_1", "project_1", {
+      locationName: "Enid",
+    });
+
+    expect(mocks.resolveRankTrackingLocation).toHaveBeenCalledWith(
+      2840,
+      "Enid",
+    );
+  });
+
+  it("rejects an invalid saved local location when only the country changes", async () => {
+    mocks.getConfigById.mockResolvedValue({
+      ...archivedConfig,
+      locationName: "Enid,Oklahoma,United States",
+    });
+    mocks.resolveRankTrackingLocation.mockRejectedValue(
+      new Error("Unknown location"),
+    );
+
+    await expect(
+      RankTrackingService.updateConfig("config_1", "project_1", {
+        locationCode: 2276,
+      }),
+    ).rejects.toThrow("Unknown location");
+
+    expect(mocks.resolveRankTrackingLocation).toHaveBeenCalledWith(
+      2276,
+      "Enid,Oklahoma,United States",
+    );
+    expect(mocks.updateConfig).not.toHaveBeenCalled();
+  });
+
+  it("does not load the registry when only the country changes on a national config", async () => {
+    mocks.getConfigById.mockResolvedValue({
+      ...archivedConfig,
+      locationName: null,
+    });
+
+    await RankTrackingService.updateConfig("config_1", "project_1", {
+      locationCode: 2276,
+    });
+
+    expect(mocks.resolveRankTrackingLocation).not.toHaveBeenCalled();
+    expect(mocks.updateConfig).toHaveBeenCalledWith(
+      "config_1",
+      "project_1",
+      expect.objectContaining({ locationCode: 2276 }),
+    );
+  });
+
+  it("can clear a local location without loading the registry", async () => {
+    await RankTrackingService.updateConfig("config_1", "project_1", {
+      locationName: null,
+    });
+
+    expect(mocks.resolveRankTrackingLocation).not.toHaveBeenCalled();
+    expect(mocks.updateConfig).toHaveBeenCalledWith(
+      "config_1",
+      "project_1",
+      expect.objectContaining({ locationName: null }),
     );
   });
 
