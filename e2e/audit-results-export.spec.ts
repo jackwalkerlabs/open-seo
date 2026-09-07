@@ -9,6 +9,10 @@ async function openCompletedAudit(page: Page) {
 
   await page.goto(`/p/${projectId}/audit?auditId=audit-results-e2e`);
   await expect(page.getByRole("tab", { name: "Issues (1)" })).toBeVisible();
+  const dismissButton = page.getByRole("button", { name: "Dismiss" });
+  if (await dismissButton.isVisible()) {
+    await dismissButton.click();
+  }
 }
 
 test("audit Export menu does not block result tabs or dismissal", async ({
