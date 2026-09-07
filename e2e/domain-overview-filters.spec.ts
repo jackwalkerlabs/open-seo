@@ -12,6 +12,34 @@ import {
 } from "./domain-overview-test-utils";
 
 test.describe("Domain Overview filters", () => {
+  test("export menu dismisses without swallowing the next tab click", async ({
+    page,
+  }) => {
+    await openDomainOverview(page, "keywords");
+
+    const exportButton = page.getByRole("button", { name: "Export" });
+    await exportButton.click();
+    await expect(page.getByRole("menu")).toBeVisible();
+
+    const download = page.waitForEvent("download");
+    await page.getByRole("menuitem", { name: "Download CSV" }).click();
+    await download;
+    await expect(page.getByRole("menu")).toHaveCount(0);
+
+    await exportButton.click();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(exportButton).toBeFocused();
+
+    await exportButton.click();
+    await page.getByRole("tab", { name: "Top Pages" }).click();
+    await expect(page.getByRole("tab", { name: "Top Pages" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await expect(page.getByRole("menu")).toHaveCount(0);
+  });
+
   test("closing an inactive search tab does not select it", async ({
     page,
   }) => {
